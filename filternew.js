@@ -5,8 +5,8 @@
 
     Lampa.Plugin.add({
         name: 'Country Filter Ultra',
-        version: '1.2',
-        description: 'Фільтр контенту для TMDB (сумісний з пультом)'
+        version: '1.3',
+        description: 'Фільтр контенту для TMDB (в боковому меню)'
     });
 
     const API_KEY = 'bbb4d66f5dd6fbc0e42c9ec8dbdaf085';
@@ -23,10 +23,37 @@
     ];
 
     function init() {
-        Lampa.Header.addButton({
-            icon: '<svg width="24" height="24" viewBox="0 0 24 24"><path fill="currentColor" d="M3 5h18l-7 8v5l-4 2v-7z"/></svg>',
-            title: 'Фільтр',
-            onSelect: showFilterMenu
+        // Додаємо пункт у бокове меню через подію створення меню
+        Lampa.Listener.follow('app', function (e) {
+            if (e.type === 'ready') {
+                // Створюємо об'єкт нового пункту меню
+                let menu_item = {
+                    title: 'Фільтр',
+                    id: 'ultra_filter',
+                    icon: '<svg width="24" height="24" viewBox="0 0 24 24"><path fill="currentColor" d="M3 5h18l-7 8v5l-4 2v-7z"/></svg>'
+                };
+
+                // Знаходимо індекс "Стрічки" (яка зазвичай йде після "Головна")
+                // і вставляємо наш пункт перед нею
+                let menu = Lampa.Menu.get();
+                let index = menu.findIndex(i => i.id === 'full' || i.id === 'feed'); // Шукаємо Стрічку
+
+                if (index > -1) {
+                    menu.splice(index, 0, menu_item);
+                } else {
+                    menu.push(menu_item);
+                }
+
+                // Обробка натискання на пункт меню
+                Lampa.Component.add('ultra_filter', function () {
+                    this.create = function () {
+                        showFilterMenu();
+                        // Одразу повертаємо фокус назад, щоб меню не "зависло" на порожньому компоненті
+                        Lampa.Controller.toggle('menu');
+                        return null;
+                    };
+                });
+            }
         });
     }
 
@@ -87,7 +114,7 @@
                     selectCountries(saved);
                 }
             },
-            onBack: () => Lampa.Controller.toggle('content')
+            onBack: () => Lampa.Controller.toggle('menu')
         });
     }
 
@@ -137,7 +164,7 @@
                 } else {
                     saved.exclude.push(item.code);
                 }
-                selectCountries(saved); // Перевідкриваємо для оновлення чекбоксів
+                selectCountries(saved);
             },
             onBack: () => {
                 saveAndRefresh(saved);
@@ -147,16 +174,13 @@
 
     function saveAndRefresh(saved) {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(saved));
-        showFilterMenu(); // Повертаємось у головне меню фільтра
+        showFilterMenu();
     }
 
     function applyFilter(f) {
         let url = `https://api.themoviedb.org/3/discover/${f.type}?api_key=${API_KEY}&language=uk-UA`;
-
         if (f.rating) url += `&vote_average.gte=${f.rating}`;
         if (f.sort) url += `&sort_by=${f.sort}`;
-        
-        // Використовуємо modern TMDB API параметр для виключення країн
         if (f.exclude && f.exclude.length) {
             url += `&without_origin_country=${f.exclude.join(',')}`;
         }
@@ -169,10 +193,7 @@
         });
     }
 
-    // Запуск плагіна
-    if (window.appready) init();
-    else Lampa.Listener.follow('app', e => {
-        if (e.type === 'ready') init();
-    });
+    // Запуск
+    init();
 
 })();
