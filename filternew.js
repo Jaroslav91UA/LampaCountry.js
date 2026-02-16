@@ -1,19 +1,21 @@
 (function () {
     'use strict';
 
-    if (!window.Lampa) return;
+    // Реєструємо компонент
+    function FilterComponent(object) {
+        this.create = function () {
+            showFilterMenu();
+            return null;
+        };
+        this.active = function () {};
+        this.pause = function () {};
+        this.destroy = function () {};
+    }
 
-    // Реєстрація плагіна в системі
-    Lampa.Plugin.add({
-        name: 'Country Filter Ultra',
-        version: '1.6',
-        description: 'Фільтр контенту (інтеграція за прикладом Studios)'
-    });
+    Lampa.Component.add('ultra_filter', FilterComponent);
 
-    const API_KEY = 'bbb4d66f5dd6fbc0e42c9ec8dbdaf085';
-    const STORAGE_KEY = 'lampa_ultra_filter_settings';
-
-    const countries = [
+    // ПОВНИЙ СПИСОК КРАЇН
+    var countries = [
         {name:'США', code:'US'}, {name:'Велика Британія', code:'GB'},
         {name:'Франція', code:'FR'}, {name:'Німеччина', code:'DE'},
         {name:'Італія', code:'IT'}, {name:'Іспанія', code:'ES'},
@@ -24,17 +26,12 @@
     ];
 
     function showFilterMenu() {
-        let saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || JSON.stringify({
-            type: 'movie',
-            rating: 5,
-            sort: 'popularity.desc',
-            exclude: []
-        }));
+        var saved = JSON.parse(localStorage.getItem('lampa_ultra_filter_settings') || '{"type":"movie","rating":5,"sort":"popularity.desc","exclude":[]}');
 
-        let items = [
+        var items = [
             { title: 'Тип: ' + (saved.type === 'movie' ? 'Фільми' : 'Серіали'), type: 'type' },
             { title: 'Мінімальний рейтинг: ' + saved.rating, type: 'rating' },
-            { title: 'Сортування: ' + (saved.sort.includes('popularity') ? 'Популярні' : 'Нові'), type: 'sort' },
+            { title: 'Сортування: ' + (saved.sort.indexOf('popularity') > -1 ? 'Популярні' : 'Нові'), type: 'sort' },
             { title: 'Виключити країни (вибрано: ' + saved.exclude.length + ')', type: 'countries' },
             { title: '🚀 ЗАСТОСУВАТИ', type: 'apply', ghost: true }
         ];
@@ -42,20 +39,19 @@
         Lampa.Select.show({
             title: 'Налаштування фільтра',
             items: items,
-            onSelect: (item) => {
+            onSelect: function (item) {
                 if (item.type === 'apply') {
                     applyFilter(saved);
                 } else if (item.type === 'type') {
                     saved.type = saved.type === 'movie' ? 'tv' : 'movie';
-                    localStorage.setItem(STORAGE_KEY, JSON.stringify(saved));
-                    showFilterMenu();
+                    save(saved);
                 } else if (item.type === 'rating') {
-                    let ratings = [];
-                    for (let i = 0; i <= 9; i++) ratings.push({title: i.toString(), value: i});
+                    var ratings = [];
+                    for (var i = 0; i <= 9; i++) ratings.push({title: i.toString(), value: i});
                     Lampa.Select.show({
-                        title: 'Мінімальний рейтинг',
+                        title: 'Рейтинг',
                         items: ratings,
-                        onSelect: (r) => { saved.rating = r.value; localStorage.setItem(STORAGE_KEY, JSON.stringify(saved)); showFilterMenu(); }
+                        onSelect: function(r){ saved.rating = r.value; save(saved); }
                     });
                 } else if (item.type === 'sort') {
                     Lampa.Select.show({
@@ -64,86 +60,86 @@
                             {title: 'Популярні', value: 'popularity.desc'},
                             {title: 'Нові', value: 'primary_release_date.desc'}
                         ],
-                        onSelect: (s) => { saved.sort = s.value; localStorage.setItem(STORAGE_KEY, JSON.stringify(saved)); showFilterMenu(); }
+                        onSelect: function(s){ saved.sort = s.value; save(saved); }
                     });
                 } else if (item.type === 'countries') {
                     selectCountries(saved);
                 }
             },
-            onBack: () => {
-                Lampa.Controller.toggle('menu');
-            }
+            onBack: function () { Lampa.Controller.toggle('menu'); }
         });
     }
 
     function selectCountries(saved) {
-        let items = countries.map(c => ({ title: c.name, code: c.code, selected: saved.exclude.includes(c.code) }));
+        var items = countries.map(function(c) {
+            return { 
+                title: c.name, 
+                code: c.code, 
+                selected: saved.exclude.indexOf(c.code) > -1 
+            };
+        });
+
         Lampa.Select.show({
             title: 'Не показувати ці країни',
             items: items,
-            onSelect: (item) => {
-                if (saved.exclude.includes(item.code)) saved.exclude = saved.exclude.filter(i => i !== item.code);
+            onSelect: function (item) {
+                var idx = saved.exclude.indexOf(item.code);
+                if (idx > -1) saved.exclude.splice(idx, 1);
                 else saved.exclude.push(item.code);
-                localStorage.setItem(STORAGE_KEY, JSON.stringify(saved));
+                save(saved);
                 selectCountries(saved);
             },
-            onBack: () => showFilterMenu()
+            onBack: function() { showFilterMenu(); }
         });
     }
 
+    function save(saved) {
+        localStorage.setItem('lampa_ultra_filter_settings', JSON.stringify(saved));
+        showFilterMenu();
+    }
+
     function applyFilter(f) {
-        let url = `https://api.themoviedb.org/3/discover/${f.type}?api_key=${API_KEY}&language=uk-UA`;
-        if (f.rating) url += `&vote_average.gte=${f.rating}`;
-        if (f.sort) url += `&sort_by=${f.sort}`;
-        if (f.exclude.length) url += `&without_origin_country=${f.exclude.join(',')}`;
+        var url = 'https://api.themoviedb.org/3/discover/' + f.type + '?api_key=bbb4d66f5dd6fbc0e42c9ec8dbdaf085&language=uk-UA';
+        if (f.rating) url += '&vote_average.gte=' + f.rating;
+        if (f.sort) url += '&sort_by=' + f.sort;
+        if (f.exclude.length) url += '&without_origin_country=' + f.exclude.join(',');
 
         Lampa.Activity.push({
             component: 'tmdb',
             url: url,
-            title: 'Фільтр: ' + (f.type === 'movie' ? 'Фільми' : 'Серіали'),
+            title: 'Фільтр',
             page: 1
         });
     }
 
-    // Головна частина: додавання в меню
-    function addMenuItem() {
-        // Реєструємо компонент, щоб Lampa знала, що запускати при кліку
-        Lampa.Component.add('ultra_filter', function () {
-            this.create = function () {
-                showFilterMenu();
+    function inject() {
+        var menu = Lampa.Menu.get();
+        if (menu.length > 0 && !menu.find(function(i){ return i.id === 'ultra_filter' })) {
+            var item = {
+                title: 'Фільтр',
+                id: 'ultra_filter',
+                icon: '<svg width="24" height="24" viewBox="0 0 24 24"><path fill="currentColor" d="M10 18h4v-2h-4v2zM3 6v2h18V6H3zm3 7h12v-2H6v2z"/></svg>'
             };
-            this.pause = function () {};
-            this.active = function () {};
-            this.destroy = function () {};
-        });
-
-        // Чекаємо на готовність додатка
-        Lampa.Listener.follow('app', function (e) {
-            if (e.type === 'ready') {
-                let menu = Lampa.Menu.get();
-                let filter_item = {
-                    title: 'Фільтр',
-                    id: 'ultra_filter',
-                    icon: '<svg width="24" height="24" viewBox="0 0 24 24"><path fill="currentColor" d="M10 18h4v-2h-4v2zM3 6v2h18V6H3zm3 7h12v-2H6v2z"/></svg>'
-                };
-
-                // Знаходимо індекс для вставки (після Головна)
-                let index = menu.findIndex(function (i) {
-                    return i.id === 'feed' || i.id === 'full';
-                });
-
-                if (index > -1) {
-                    menu.splice(index, 0, filter_item);
-                } else {
-                    menu.splice(1, 0, filter_item);
+            
+            var index = -1;
+            for(var i=0; i < menu.length; i++) {
+                // Вставка після Головна (id: 'main' або просто перший елемент) 
+                // та перед Стрічка (id: 'feed' або 'full')
+                if(menu[i].id === 'feed' || menu[i].id === 'full') {
+                    index = i;
+                    break;
                 }
-
-                // Оновлюємо візуальне меню (як у Studios)
-                if (Lampa.Menu.render) Lampa.Menu.render();
             }
-        });
+
+            if (index > -1) menu.splice(index, 0, item);
+            else menu.splice(1, 0, item);
+
+            if (Lampa.Menu.render) Lampa.Menu.render();
+        }
     }
 
-    addMenuItem();
+    Lampa.Listener.follow('app', function (e) {
+        if (e.type === 'ready') inject();
+    });
 
 })();
