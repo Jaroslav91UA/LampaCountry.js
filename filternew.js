@@ -1,12 +1,12 @@
-(function () {
+            (function () {
     'use strict';
 
     if (!window.Lampa) return;
 
     Lampa.Plugin.add({
         name: 'Country Filter Ultra',
-        version: '1.3',
-        description: 'Фільтр контенту для TMDB (в боковому меню)'
+        version: '1.4',
+        description: 'Фільтр контенту для TMDB (між Головна та Стрічка)'
     });
 
     const API_KEY = 'bbb4d66f5dd6fbc0e42c9ec8dbdaf085';
@@ -23,36 +23,35 @@
     ];
 
     function init() {
-        // Додаємо пункт у бокове меню через подію створення меню
-        Lampa.Listener.follow('app', function (e) {
+        // Створюємо компонент, який буде викликати меню фільтра
+        Lampa.Component.add('ultra_filter', function () {
+            this.create = function () {
+                showFilterMenu();
+                return null;
+            };
+        });
+
+        // Додаємо в меню, коли воно буде готове
+        Lampa.Listener.follow('app', (e) => {
             if (e.type === 'ready') {
-                // Створюємо об'єкт нового пункту меню
-                let menu_item = {
+                let menu = Lampa.Menu.get();
+                let item = {
                     title: 'Фільтр',
                     id: 'ultra_filter',
                     icon: '<svg width="24" height="24" viewBox="0 0 24 24"><path fill="currentColor" d="M3 5h18l-7 8v5l-4 2v-7z"/></svg>'
                 };
 
-                // Знаходимо індекс "Стрічки" (яка зазвичай йде після "Головна")
-                // і вставляємо наш пункт перед нею
-                let menu = Lampa.Menu.get();
-                let index = menu.findIndex(i => i.id === 'full' || i.id === 'feed'); // Шукаємо Стрічку
-
+                // Шукаємо позицію після "Головна" (index 0) або перед "Стрічка"
+                let index = menu.findIndex(a => a.id === 'feed' || a.id === 'full');
+                
                 if (index > -1) {
-                    menu.splice(index, 0, menu_item);
+                    menu.splice(index, 0, item);
                 } else {
-                    menu.push(menu_item);
+                    menu.splice(1, 0, item); // Якщо не знайшли, просто ставимо другим пунктом
                 }
-
-                // Обробка натискання на пункт меню
-                Lampa.Component.add('ultra_filter', function () {
-                    this.create = function () {
-                        showFilterMenu();
-                        // Одразу повертаємо фокус назад, щоб меню не "зависло" на порожньому компоненті
-                        Lampa.Controller.toggle('menu');
-                        return null;
-                    };
-                });
+                
+                // Оновлюємо відображення меню, якщо воно вже було відмальоване
+                if(Lampa.Menu.render) Lampa.Menu.render();
             }
         });
     }
@@ -68,51 +67,23 @@
 
     function showFilterMenu() {
         let saved = getSettings();
-
         let items = [
-            {
-                title: 'Тип: ' + (saved.type === 'movie' ? 'Фільми' : 'Серіали'),
-                subtitle: 'Змінити тип контенту',
-                type: 'type'
-            },
-            {
-                title: 'Мінімальний рейтинг: ' + saved.rating,
-                subtitle: 'Від 0 до 10',
-                type: 'rating'
-            },
-            {
-                title: 'Сортування',
-                subtitle: 'Зараз: ' + (saved.sort.includes('popularity') ? 'Популярні' : 'Нові'),
-                type: 'sort'
-            },
-            {
-                title: 'Виключити країни',
-                subtitle: saved.exclude.length ? 'Вибрано: ' + saved.exclude.length : 'Немає виключень',
-                type: 'countries'
-            },
-            {
-                title: '🚀 ЗАСТОСУВАТИ',
-                type: 'apply',
-                ghost: true
-            }
+            { title: 'Тип: ' + (saved.type === 'movie' ? 'Фільми' : 'Серіали'), type: 'type' },
+            { title: 'Мінімальний рейтинг: ' + saved.rating, type: 'rating' },
+            { title: 'Сортування: ' + (saved.sort.includes('popularity') ? 'Популярні' : 'Нові'), type: 'sort' },
+            { title: 'Виключити країни: ' + (saved.exclude.length || '0'), type: 'countries' },
+            { title: '🚀 ЗАСТОСУВАТИ', type: 'apply', ghost: true }
         ];
 
         Lampa.Select.show({
             title: 'Налаштування фільтра',
             items: items,
             onSelect: (item) => {
-                if (item.type === 'apply') {
-                    applyFilter(saved);
-                } else if (item.type === 'type') {
-                    saved.type = saved.type === 'movie' ? 'tv' : 'movie';
-                    saveAndRefresh(saved);
-                } else if (item.type === 'rating') {
-                    selectRating(saved);
-                } else if (item.type === 'sort') {
-                    selectSort(saved);
-                } else if (item.type === 'countries') {
-                    selectCountries(saved);
-                }
+                if (item.type === 'apply') applyFilter(saved);
+                else if (item.type === 'type') { saved.type = saved.type === 'movie' ? 'tv' : 'movie'; saveAndRefresh(saved); }
+                else if (item.type === 'rating') selectRating(saved);
+                else if (item.type === 'sort') selectSort(saved);
+                else if (item.type === 'countries') selectCountries(saved);
             },
             onBack: () => Lampa.Controller.toggle('menu')
         });
@@ -124,10 +95,7 @@
         Lampa.Select.show({
             title: 'Мінімальний рейтинг',
             items: ratings,
-            onSelect: (item) => {
-                saved.rating = item.value;
-                saveAndRefresh(saved);
-            }
+            onSelect: (item) => { saved.rating = item.value; saveAndRefresh(saved); }
         });
     }
 
@@ -139,36 +107,21 @@
                 {title: 'Нові', value: 'primary_release_date.desc'},
                 {title: 'Рейтинг', value: 'vote_average.desc'}
             ],
-            onSelect: (item) => {
-                saved.sort = item.value;
-                saveAndRefresh(saved);
-            }
+            onSelect: (item) => { saved.sort = item.value; saveAndRefresh(saved); }
         });
     }
 
     function selectCountries(saved) {
-        let items = countries.map(c => {
-            return {
-                title: c.name,
-                code: c.code,
-                selected: saved.exclude.includes(c.code)
-            };
-        });
-
+        let items = countries.map(c => ({ title: c.name, code: c.code, selected: saved.exclude.includes(c.code) }));
         Lampa.Select.show({
             title: 'Не показувати ці країни',
             items: items,
             onSelect: (item) => {
-                if (saved.exclude.includes(item.code)) {
-                    saved.exclude = saved.exclude.filter(i => i !== item.code);
-                } else {
-                    saved.exclude.push(item.code);
-                }
+                if (saved.exclude.includes(item.code)) saved.exclude = saved.exclude.filter(i => i !== item.code);
+                else saved.exclude.push(item.code);
                 selectCountries(saved);
             },
-            onBack: () => {
-                saveAndRefresh(saved);
-            }
+            onBack: () => saveAndRefresh(saved)
         });
     }
 
@@ -181,9 +134,7 @@
         let url = `https://api.themoviedb.org/3/discover/${f.type}?api_key=${API_KEY}&language=uk-UA`;
         if (f.rating) url += `&vote_average.gte=${f.rating}`;
         if (f.sort) url += `&sort_by=${f.sort}`;
-        if (f.exclude && f.exclude.length) {
-            url += `&without_origin_country=${f.exclude.join(',')}`;
-        }
+        if (f.exclude && f.exclude.length) url += `&without_origin_country=${f.exclude.join(',')}`;
 
         Lampa.Activity.push({
             component: 'tmdb',
@@ -193,7 +144,5 @@
         });
     }
 
-    // Запуск
     init();
-
 })();
